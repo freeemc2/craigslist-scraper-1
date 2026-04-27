@@ -2,7 +2,6 @@
   "name": "getting-started-typescript",
   "version": "0.0.1",
   "type": "module",
-  "description": "An Actor that scrapes craigslist post data",
   "dependencies": {
     "apify": "^3.12.0",
     "axios": "^1.6.0",
@@ -18,9 +17,6 @@
     "build": "tsc",
     "start": "node dist/main-cloud.js",
     "start:cloud": "node dist/main-cloud.js",
-    "start:dev": "node dist/main-dev.js",
     "postinstall": "npm run build"
-  },
-  "author": "asowder3943",
-  "license": "ISC"
+  }
 }
