@@ -1,15 +1,20 @@
 {
     "compilerOptions": {
-        "module": "ESNext",
-        "moduleResolution": "Node",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
         "target": "ESNext",
         "lib": ["DOM", "DOM.Iterable", "ESNext"],
         "skipLibCheck": true,
         "outDir": "dist",
         "allowJs": true,
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "declaration": false
     },
     "include": [
         "src/**/*.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
     ]
 }
