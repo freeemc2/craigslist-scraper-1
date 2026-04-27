@@ -7,7 +7,7 @@ import { CrawlerSetup } from './scraper.js';
 import { InputSchema } from './types.js';
 
 const workingInputCase: InputSchema = {
-	category: ['ggg'],
+	category: ['gms'],
 	maxPagesPerCrawl: 100,
 	proxyConfiguration: {
 		useApifyProxy: false,
