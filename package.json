@@ -20,7 +20,7 @@
     "start:cloud": "node dist/main-cloud.js",
     "start:dev": "node dist/main-dev.js",
     "postinstall": "npm run build"
-  }
+  },
   "author": "asowder3943",
   "license": "ISC"
 }
