@@ -6,7 +6,6 @@
         "target": "ESNext",
         "lib": ["DOM", "DOM.Iterable", "ESNext"],
         "skipLibCheck": true,
-        "noImplicitAny": false,
         "outDir": "dist"
     },
     "include": [
