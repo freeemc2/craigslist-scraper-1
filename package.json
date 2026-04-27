@@ -15,9 +15,10 @@
     "typescript": "^5.4.0"
   },
   "scripts": {
-    "start": "node dist/main.js",
-    "start:cloud": "node dist/main.js",
     "build": "tsc",
+    "start": "node dist/main-cloud.js",
+    "start:cloud": "node dist/main-cloud.js",
+    "start:dev": "node dist/main-dev.js",
     "postinstall": "npm run build"
   }
   "author": "asowder3943",
