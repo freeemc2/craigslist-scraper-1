@@ -14,9 +14,9 @@
     "typescript": "^5.4.0"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
     "start": "node dist/main-cloud.js",
     "start:cloud": "node dist/main-cloud.js",
     "postinstall": "npm run build"
-  }
+  },
 }
