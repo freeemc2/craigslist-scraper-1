@@ -1,6 +1,5 @@
 import { PROXY_ROTATION_NAMES, SESSION_MAX_USAGE_COUNTS } from "./consts.js";
 import { PlaywrightCrawler } from "crawlee";
-import { strict as assert } from "assert";
 import { CraigslistPost, InputSchema, Search } from "./types.js";
 import { validateInput, getRequestUrls } from "./validation.js";
 import { Actor } from "apify";
@@ -28,75 +27,67 @@ export class CrawlerSetup {
 
   async getCrawler(): Promise<PlaywrightCrawler> {
     if (this.input.healthcheck) {
-        await axios.get(this.input.healthcheck).catch(() => {});
+      await axios.get(this.input.healthcheck).catch(() => {});
     }
 
     return new PlaywrightCrawler({
       maxConcurrency: this.input.maxConcurrency,
       maxRequestRetries: this.input.maxRequestRetries,
       maxRequestsPerCrawl: this.input.maxPagesPerCrawl,
-      proxyConfiguration: await Actor.createProxyConfiguration(
-        this.input.proxyConfiguration
-      ),
+      proxyConfiguration: await Actor.createProxyConfiguration(this.input.proxyConfiguration),
       useSessionPool: true,
-      sessionPoolOptions: {
-        maxPoolSize: this.maxPoolSize,
-        sessionOptions: {
-          maxUsageCount: this.maxSessionUsageCount,
-        },
-      },
       headless: true,
       requestHandler: async ({ page, request }) => {
-        console.log(`Scraping ${await page.title()} | ${request.url}`);
+        console.info(`Scraping: ${request.url}`);
 
-        const titles = await page.$$eval(".titlestring", (els) => {
-          return els.map((el) => el.textContent?.trim() || "");
+        // Wait for the main results to load to avoid empty scrapes
+        await page.waitForSelector(".result-node, .gallery-card", { timeout: 10000 }).catch(() => {
+            console.warn("No result nodes found on page.");
         });
 
-        const urls = await page.$$eval(".titlestring", (els) => {
-          return els.map((el) => el.getAttribute("href") || "");
-        });
+        // Use a single selector for the container to ensure data alignment
+        const posts = await page.$$eval(".result-node", (elements) => {
+          return elements.map((el) => {
+            const titleEl = el.querySelector(".titlestring");
+            const metaEl = el.querySelector(".meta");
+            
+            const title = titleEl?.textContent?.trim() || "";
+            const url = titleEl?.getAttribute("href") || "";
+            const metaHtml = metaEl?.innerHTML || "";
 
-        const dates = await page.$$eval(".meta", (els) => {
-          return els.map((el) => {
-            // FIX: Changed getInnerHTML() to innerHTML
-            let ih = el.innerHTML; 
-            let ub = ih.search(/\(/);
-            // Attempt to parse the date string found between the metadata
-            try {
-                let dateStr = ih.substring(13, ub - 1).trim();
-                let created = new Date(dateStr);
-                return created.toISOString(); 
-            } catch (e) {
-                return new Date().toISOString();
+            // Filter out "upcoming" headers or empty entries
+            if (!title || !url || metaHtml.toLowerCase().includes("upcoming")) {
+                return null;
             }
-          });
+
+            // Extract date: handling standard '13 mins ago' or date strings
+            let dateVal = new Date().toISOString();
+            if (metaHtml.includes("(")) {
+                const datePart = metaHtml.split("(")[0].trim();
+                const parsedDate = new Date(datePart);
+                if (!isNaN(parsedDate.getTime())) {
+                    dateVal = parsedDate.toISOString();
+                }
+            }
+
+            return {
+              url,
+              description: title,
+              created: dateVal,
+            };
+          }).filter(post => post !== null);
         });
 
-        try {
-          assert.equal(titles.length, urls.length, `Titles and URLs count mismatch`);
-          assert.equal(urls.length, dates.length, `URLs and Dates count mismatch`);
-        } catch (AssertionError) {
-          console.warn(`${AssertionError}`);
-        }
+        console.info(`Successfully parsed ${posts.length} listings.`);
 
-        const posts: CraigslistPost[] = [];
-        for (let i = 0; i < titles.length; i++) {
-          posts.push({
-            url: urls[i],
-            description: titles[i],
-            created: dates[i],
-          });
-        }
+        if (posts.length > 0) {
+            await Actor.pushData(posts);
 
-        console.info(`Found ${posts.length} posts on this page.`);
-        await Actor.pushData(posts);
-
-        // Send to VPS backend
-        if (this.input.externalAPI) {
-            for (const post of posts) {
-                await axios.post(this.input.externalAPI, post).catch((err) => {
-                    console.error(`Failed to send post to VPS: ${err.message}`);
+            if (this.input.externalAPI) {
+                console.info(`Sending ${posts.length} posts to VPS...`);
+                // Send as a batch to the VPS to be more efficient
+                await axios.post(this.input.externalAPI, posts).catch((err) => {
+                    console.error(`VPS Error: ${err.message}`);
                 });
             }
         }
