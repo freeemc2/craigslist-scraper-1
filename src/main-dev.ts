@@ -8,7 +8,7 @@ import { InputSchema } from './types.js';
 
 const workingInputCase: InputSchema = {
 	// Example Development Configuration
-	category: ['ggg'],
+	category: ['gms'],
 	maxPagesPerCrawl: 10,
 	proxyConfiguration: {
 		useApifyProxy: false,
