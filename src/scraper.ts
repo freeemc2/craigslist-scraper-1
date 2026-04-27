@@ -7,8 +7,6 @@ import { Actor } from "apify";
 import axios from "axios";
 
 export class CrawlerSetup {
-
-  // Provide typing information 
   name: string;
   search: Search;
   crawler!: PlaywrightCrawler | Promise<PlaywrightCrawler>;
@@ -17,7 +15,6 @@ export class CrawlerSetup {
   maxSessionUsageCount: number;
   maxPoolSize!: number;
 
-  // Construct Playwright scraper with input defining the scope of the search
   constructor(input: InputSchema) {
     this.input = input;
     this.name = "Craigslist Playwright Scraper";
@@ -30,7 +27,9 @@ export class CrawlerSetup {
   }
 
   async getCrawler(): Promise<PlaywrightCrawler> {
-    await axios.get(this.input.healthcheck!).catch(() => {});
+    if (this.input.healthcheck) {
+        await axios.get(this.input.healthcheck).catch(() => {});
+    }
 
     return new PlaywrightCrawler({
       maxConcurrency: this.input.maxConcurrency,
@@ -47,65 +46,60 @@ export class CrawlerSetup {
         },
       },
       headless: true,
-      // for each request preform the following:
       requestHandler: async ({ page, request }) => {
         console.log(`Scraping ${await page.title()} | ${request.url}`);
 
-        // collect important features from the current page including post titles, urls, and dates of posting
-        const titles = await page.$$eval(".titlestring", (els: any[]) => {
-          return els.map((el) => el.textContent);
+        const titles = await page.$$eval(".titlestring", (els) => {
+          return els.map((el) => el.textContent?.trim() || "");
         });
 
-
-        const urls = await page.$$eval(".titlestring", (els: any[]) => {
-          return els.map((el) => el.getAttribute("href"));
+        const urls = await page.$$eval(".titlestring", (els) => {
+          return els.map((el) => el.getAttribute("href") || "");
         });
 
-        const dates = await page.$$eval(".meta", (els: any[]) => {
+        const dates = await page.$$eval(".meta", (els) => {
           return els.map((el) => {
-            let ih =  el.getInnerHTML()
-            let ub = ih.search(/\(/)
-            let created = new Date(ih.substring(13,ub-1))
-            return JSON.stringify(created).replace(/\\/g, '').replace(/"/g,'')
+            // FIX: Changed getInnerHTML() to innerHTML
+            let ih = el.innerHTML; 
+            let ub = ih.search(/\(/);
+            // Attempt to parse the date string found between the metadata
+            try {
+                let dateStr = ih.substring(13, ub - 1).trim();
+                let created = new Date(dateStr);
+                return created.toISOString(); 
+            } catch (e) {
+                return new Date().toISOString();
+            }
           });
         });
 
-
-        // Sanity Check: Confirm the list of titles matched the number of dates and urls discovered
         try {
-          assert.equal(
-            titles.length,
-            urls.length,
-            `The number of titles found does not match the number of urls found`
-          );
-          assert.equal(
-            urls.length,
-            dates.length,
-            `The number of titles found does not match the number of urls found`
-          );
+          assert.equal(titles.length, urls.length, `Titles and URLs count mismatch`);
+          assert.equal(urls.length, dates.length, `URLs and Dates count mismatch`);
         } catch (AssertionError) {
           console.warn(`${AssertionError}`);
         }
 
-        // construct an array of Craigslist Post objects using the features collected from the page
-        var posts: CraigslistPost[] = [];
-        for (var i in titles) {
+        const posts: CraigslistPost[] = [];
+        for (let i = 0; i < titles.length; i++) {
           posts.push({
-            url: await urls[i]!,
-            description: await titles[i]!,
-            created: await dates[i]!,
+            url: urls[i],
+            description: titles[i],
+            created: dates[i],
           });
-          console.info(posts)
         }
 
-        // Save Data to Key Value Store
+        console.info(`Found ${posts.length} posts on this page.`);
         await Actor.pushData(posts);
 
-        // Send All posts to backend django server for analyses
-        posts.forEach(async (post) => {
-          await console.log(post)
-          await axios.post(this.input.externalAPI!, post).catch(() => {});
-        });
+        // Send to VPS backend
+        if (this.input.externalAPI) {
+            for (const post of posts) {
+                await axios.post(this.input.externalAPI, post).catch((err) => {
+                    console.error(`Failed to send post to VPS: ${err.message}`);
+                });
+            }
+        }
       },
     });
   }
